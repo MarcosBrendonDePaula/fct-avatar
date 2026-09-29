@@ -53,6 +53,7 @@ class StateMapper:
         self._s = {}
         self._last_t = None
         self._rest = None          # pose de repouso capturada na calibracao
+        self._auto_desde = None    # inicio da janela de calibracao automatica
         self._params = AvatarParams()
         self._t_start = time.time()
 
@@ -67,6 +68,24 @@ class StateMapper:
         if frame.face_present:
             self._rest = (frame.head.yaw, frame.head.pitch, frame.head.roll,
                           frame.head.x, frame.head.y)
+            self._auto_desde = None
+
+    def _auto_calibrar(self, frame, now):
+        """Calibra sozinho depois de um tempo de rosto estavel.
+
+        Sem isso o avatar comeca torto ate a pessoa descobrir a tecla C: a
+        pose neutra de cada rosto (e de cada angulo de webcam) nao e zero.
+        """
+        if self._rest is not None:
+            return
+        if not frame.face_present:
+            self._auto_desde = None
+            return
+        if self._auto_desde is None:
+            self._auto_desde = now
+        elif now - self._auto_desde > 1.5:
+            self.calibrate(frame)
+            print("repouso calibrado automaticamente (tecla C refaz)")
 
     def update(self, frame):
         # relogio de parede, nao o timestamp do frame: o mesmo AvatarFrame pode
@@ -75,6 +94,8 @@ class StateMapper:
         now = time.time()
         dt = 1 / 30 if self._last_t is None else max(1e-3, now - self._last_t)
         self._last_t = now
+
+        self._auto_calibrar(frame, now)
 
         p = self._params
         p.present = frame.face_present

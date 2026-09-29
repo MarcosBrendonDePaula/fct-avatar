@@ -66,6 +66,20 @@
         0
       ]
     },
+    "cabeca_cima": {
+      "arquivo": "cabeca_cima.png",
+      "pos": [
+        0,
+        0
+      ]
+    },
+    "cabeca_baixo": {
+      "arquivo": "cabeca_baixo.png",
+      "pos": [
+        0,
+        0
+      ]
+    },
     "olhos_abertos:olho_e": {
       "arquivo": "olhos_abertos__olho_e.png",
       "pos": [

@@ -17,18 +17,32 @@ MODELS = Path(__file__).resolve().parent.parent / "models"
 
 
 def _euler_from_matrix(m):
-    """Extrai yaw/pitch/roll (graus) da matriz 4x4 de transformacao facial."""
+    """Extrai yaw/pitch/roll (graus) da matriz 4x4 de transformacao facial.
+
+    A matriz e R = Rz*Ry*Rx, com X para a direita, Y para cima e Z para a
+    camera. Logo o que interessa para uma cabeca e:
+
+        yaw   (virar para os lados) = rotacao em Y
+        pitch (acenar cima/baixo)   = rotacao em X
+        roll  (tombar a cabeca)     = rotacao em Z
+
+    Eu tinha atribuido os tres na ordem errada, e dava para ver: passando a
+    arte com a cabeca virada de lado pelo tracker, o giro saia no canal do
+    acenar.
+    """
     r = np.asarray(m, dtype=float)[:3, :3]
-    sy = math.sqrt(r[0, 0] ** 2 + r[1, 0] ** 2)
-    if sy > 1e-6:
-        pitch = math.atan2(-r[2, 0], sy)
-        yaw = math.atan2(r[1, 0], r[0, 0])
-        roll = math.atan2(r[2, 1], r[2, 2])
+    cy = math.sqrt(r[2, 1] ** 2 + r[2, 2] ** 2)
+    yaw = math.atan2(-r[2, 0], cy)
+    if cy > 1e-6:
+        pitch = math.atan2(r[2, 1], r[2, 2])
+        roll = math.atan2(r[1, 0], r[0, 0])
     else:
-        pitch = math.atan2(-r[2, 0], sy)
-        yaw = 0.0
-        roll = math.atan2(-r[1, 2], r[1, 1])
-    return math.degrees(yaw), math.degrees(pitch), math.degrees(roll)
+        pitch = math.atan2(-r[1, 2], r[1, 1])
+        roll = 0.0
+    # pitch sai negativo quando a cabeca sobe; invertemos para casar com o
+    # contrato de HeadPose ("+ = olhando para cima"). Conferido passando as
+    # artes olha_cima/olha_baixo pelo proprio tracker.
+    return math.degrees(yaw), -math.degrees(pitch), math.degrees(roll)
 
 
 class Tracker:

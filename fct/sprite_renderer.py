@@ -28,6 +28,8 @@ ART = RAIZ / "art"
 
 ENTRA_GIRO = 0.45     # a partir daqui troca para a arte de 3/4
 VOLTA_FRENTE = 0.30   # e so volta a frontal abaixo daqui (histerese)
+ENTRA_NOD = 0.50      # idem para o acenar (cima/baixo)
+VOLTA_NOD = 0.33
 MARGEM_GIRO = 90      # folga em volta da cabeca para a rotacao nao cortar
 
 # viseme -> sprite disponivel (e/u reaproveitam os vizinhos mais proximos)
@@ -109,7 +111,8 @@ class SpriteRenderer:
         self.hy0 = max(0, y0 - MARGEM_GIRO)
         hx1 = min(w, x1 + MARGEM_GIRO)
         hy1 = min(h, y1 + MARGEM_GIRO)
-        for nome in ("cabeca", "cabeca_esq", "cabeca_dir"):
+        for nome in ("cabeca", "cabeca_esq", "cabeca_dir",
+                     "cabeca_cima", "cabeca_baixo"):
             if nome in cam:
                 self.cabecas[nome] = np.ascontiguousarray(
                     cam[nome][0][self.hy0:hy1, self.hx0:hx1]
@@ -166,14 +169,32 @@ class SpriteRenderer:
         roi[:, :, :3] = cor
         np.maximum(roi[:, :, 3], s[:, :, 3], out=roi[:, :, 3])
 
-    def _decidir_vista(self, turn):
+    # vista -> (parametro que a controla, sinal esperado desse parametro)
+    EIXOS = {
+        "cabeca_dir": ("head_turn", +1), "cabeca_esq": ("head_turn", -1),
+        "cabeca_cima": ("head_nod", +1), "cabeca_baixo": ("head_nod", -1),
+    }
+
+    def _decidir_vista(self, p):
+        """Escolhe a arte de 3/4, de cima ou de baixo - ou None para a frontal.
+
+        O giro tem prioridade sobre o acenar: virar a cabeca muda muito mais a
+        silhueta do que levantar o queixo, entao e o que o olho nota primeiro.
+        A histerese evita tremular quando o valor para em cima do limiar.
+        """
         if self._vista is None:
-            if abs(turn) > ENTRA_GIRO:
-                self._vista = "cabeca_dir" if turn > 0 else "cabeca_esq"
+            if abs(p.head_turn) > ENTRA_GIRO:
+                self._vista = "cabeca_dir" if p.head_turn > 0 else "cabeca_esq"
+            elif abs(p.head_nod) > ENTRA_NOD:
+                self._vista = "cabeca_cima" if p.head_nod > 0 else "cabeca_baixo"
         else:
-            girando_dir = self._vista == "cabeca_dir"
-            if abs(turn) < VOLTA_FRENTE or (turn > 0) != girando_dir:
+            campo, sinal = self.EIXOS[self._vista]
+            v = getattr(p, campo)
+            limite = VOLTA_FRENTE if campo == "head_turn" else VOLTA_NOD
+            if abs(v) < limite or (v > 0) != (sinal > 0):
                 self._vista = None
+        if self._vista and self._vista not in self.cabecas:
+            self._vista = None          # arte ainda nao gerada
         return self._vista
 
     # --------------------------------------------------------------- publico
@@ -182,8 +203,8 @@ class SpriteRenderer:
         # e TROCADA, nao misturada. Cruzar as duas sobrepunha dois narizes e
         # duas bocas. Misturar so serve entre imagens quase iguais, como olho
         # aberto e fechado.
-        vista = self._decidir_vista(p.head_turn)
-        if vista and vista in self.cabecas:
+        vista = self._decidir_vista(p)
+        if vista:
             cabeca = self.cabecas[vista].copy()
         else:
             cabeca = self.cabecas["cabeca"].copy()
@@ -205,9 +226,15 @@ class SpriteRenderer:
         # aparecer. Mexer mais que isso comeca a mostrar o buraco.
         bob = (p.bounce - 0.5) * 4
         dx = p.head_x * 28 + p.head_turn * 10
-        dy = p.head_y * 22 + bob
+        # Acenar (head_nod): a cabeca sobe/desce E encurta na vertical, porque
+        # inclinar para qualquer um dos lados encurta o rosto em perspectiva.
+        # So o deslocamento, sem o encurtamento, parece a cabeca deslizando.
+        dy = p.head_y * 22 - p.head_nod * 18 + bob
+        squash = 1.0 if vista else 1.0 - 0.10 * abs(p.head_nod)
 
         m = cv2.getRotationMatrix2D(self.pivo, -p.head_tilt * 9, 1.0)
+        m[1, :] *= squash                 # encurta em y em torno do pivo
+        m[1, 2] += self.pivo[1] * (1 - squash)
         m[0, 2] += dx
         m[1, 2] += dy
         cabeca = cv2.warpAffine(cabeca, m, (cabeca.shape[1], cabeca.shape[0]),

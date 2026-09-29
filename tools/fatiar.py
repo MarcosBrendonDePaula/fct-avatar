@@ -151,7 +151,7 @@ def furar_corpo(img, pts, size, encolher=0.86):
     return Image.fromarray(out, "RGBA")
 
 
-def recortar_cabeca(img, pts, size, destino):
+def recortar_cabeca(img, pts, size, destino, extra_baixo=0.35):
     """Salva a arte recortada por uma elipse suave em volta do rosto e cabelo.
 
     A elipse vem dos landmarks, nao de numeros fixos, para funcionar igual na
@@ -168,7 +168,7 @@ def recortar_cabeca(img, pts, size, destino):
 
     mascara = Image.new("L", size, 0)
     ImageDraw.Draw(mascara).ellipse(
-        [cx - rx, cy - ry, cx + rx, cy + ry + ry * 0.35], fill=255
+        [cx - rx, cy - ry, cx + rx, cy + ry + ry * extra_baixo], fill=255
     )
     mascara = mascara.filter(ImageFilter.GaussianBlur(14))
 
@@ -230,14 +230,18 @@ def main():
 
     # vistas de 3/4: cada uma calcula a propria elipse pelos landmarks dela,
     # entao o recorte acompanha a cabeca virada sem ninguem ajustar na mao
-    for nome, arquivo in (("cabeca_esq", "vira_esq.png"),
-                          ("cabeca_dir", "vira_dir.png")):
+    # a vista de cima expoe muito mais pescoco, entao a elipse precisa descer
+    # mais para continuar cobrindo o furo aberto na camada do corpo
+    for nome, arquivo, extra in (("cabeca_esq", "vira_esq.png", 0.35),
+                                 ("cabeca_dir", "vira_dir.png", 0.35),
+                                 ("cabeca_cima", "olha_cima.png", 0.85),
+                                 ("cabeca_baixo", "olha_baixo.png", 0.45)):
         origem = ART / arquivo
         if not origem.exists():
             continue
         pts_v, size_v = landmarks(origem)
         img_v = Image.open(origem).convert("RGBA")
-        recortar_cabeca(img_v, pts_v, size_v, OUT / f"{nome}.png")
+        recortar_cabeca(img_v, pts_v, size_v, OUT / f"{nome}.png", extra)
         manifesto["camadas"][nome] = {"arquivo": f"{nome}.png", "pos": [0, 0]}
 
     # sprites de troca: mesma caixa, arquivos diferentes
