@@ -26,6 +26,8 @@ from fct.sprite_renderer import SpriteRenderer
 from fct.state import StateMapper
 
 FUNDO = (26, 28, 34)
+JANELA = "Avatar"
+JANELA_DEBUG = "Avatar - debug"
 VERDE = (150, 240, 160)
 AMARELO = (120, 220, 250)
 VERMELHO = (110, 110, 250)
@@ -40,9 +42,10 @@ GRUPOS = {
 }
 
 
-def rgba_para_bgr(img):
-    """O renderer do preview ja desenha sobre um fundo opaco, entao aqui e so
-    trocar a ordem dos canais. Compor em float32 custava 50ms por frame."""
+def para_bgr(img):
+    """O SpriteRenderer ja devolve BGR pronto; o placeholder devolve PIL RGBA."""
+    if isinstance(img, np.ndarray):
+        return img
     return cv2.cvtColor(np.asarray(img), cv2.COLOR_RGBA2BGR)
 
 
@@ -135,7 +138,7 @@ def main():
                     help="usa o boneco desenhado em codigo em vez da arte")
     ap.add_argument("--ganho", type=float, default=1.0)
     ap.add_argument("--gama", type=float, default=1.0)
-    ap.add_argument("--fps", type=float, default=45,
+    ap.add_argument("--fps", type=float, default=60,
                     help="limite do laco de desenho; desenhar solto rouba CPU "
                          "da thread de tracking e o movimento fica pior")
     ap.add_argument("--auto-brilho", action="store_true",
@@ -149,7 +152,8 @@ def main():
     renderer = criar_renderer(placeholder, fundo)
 
     debug, malha = True, True
-    fps, t_prev = 0.0, time.time()
+    fps, t_prev, t_painel = 0.0, time.time(), 0.0
+    posicionadas = False
     print(__doc__)
 
     with TrackingThread(args.camera, track_hands=not args.no_hands,
@@ -166,16 +170,26 @@ def main():
             if frame is None:
                 continue
             params = mapper.update(av)
-            img = rgba_para_bgr(renderer.render(params))
+            img = para_bgr(renderer.render(params))
 
             agora = time.time()
             fps = 0.9 * fps + 0.1 / max(1e-6, agora - t_prev)
             t_prev = agora
 
-            if debug:
-                img = np.hstack([img, painel(frame, params, ajuste, fps,
-                                             pipe.fps, malha, av)])
-            cv2.imshow("Avatar - preview", img)
+            cv2.imshow(JANELA, img)
+
+            # O debug vai em janela separada e so atualiza a ~15 fps. Junto do
+            # avatar, ele dobrava a area do imshow e derrubava o desenho de 62
+            # para 44 fps - e a janela do avatar precisa ficar limpa de
+            # qualquer jeito, porque e ela que o OBS vai capturar.
+            if debug and agora - t_painel > 1 / 15:
+                t_painel = agora
+                cv2.imshow(JANELA_DEBUG,
+                           painel(frame, params, ajuste, fps, pipe.fps, malha, av))
+                if not posicionadas:
+                    posicionadas = True
+                    cv2.moveWindow(JANELA, 40, 60)
+                    cv2.moveWindow(JANELA_DEBUG, 40 + img.shape[1] + 20, 60)
 
             k = cv2.waitKey(1) & 0xFF
             if k in (27, ord("q")):
@@ -203,7 +217,9 @@ def main():
                 renderer = criar_renderer(placeholder, fundo)
             elif k == ord("d"):
                 debug = not debug
-                cv2.destroyAllWindows()
+                posicionadas = False
+                if not debug:
+                    cv2.destroyWindow(JANELA_DEBUG)
 
     cv2.destroyAllWindows()
 
