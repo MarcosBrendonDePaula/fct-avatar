@@ -15,6 +15,8 @@ from .types import AvatarFrame, Hand, HeadPose
 
 MODELS = Path(__file__).resolve().parent.parent / "models"
 
+ESPELHO_LADO = {"Left": "Right", "Right": "Left"}
+
 
 def _euler_from_matrix(m):
     """Extrai yaw/pitch/roll (graus) da matriz 4x4 de transformacao facial.
@@ -124,7 +126,14 @@ class Tracker:
                     handedness = hand_res.handedness[i][0]
                     maos.append(
                         Hand(
-                            side=handedness.category_name,
+                            # O quadro chega espelhado (capture.py inverte para
+                            # que mexer para a direita mova para a direita), mas
+                            # o MediaPipe decide qual mao e qual supondo imagem
+                            # NAO espelhada. Os rotulos vem trocados, e sem
+                            # desfazer isso a arte da mao sai virada ao
+                            # contrario.
+                            side=ESPELHO_LADO.get(handedness.category_name,
+                                                  handedness.category_name),
                             confidence=handedness.score,
                             landmarks=[(p.x, p.y, p.z) for p in lms],
                         )

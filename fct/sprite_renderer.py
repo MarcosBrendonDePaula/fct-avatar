@@ -29,6 +29,7 @@ ART = RAIZ / "art"
 
 GIRO_MAX = 0.16       # radianos de giro no cilindro em head_turn = 1
 ACENO_MAX = 0.13      # idem para o acenar
+ARTE_POLEGAR_DIR = True   # a arte da mao tem o polegar a direita (medido)
 ESCALA_MAO = 2.2       # quanto a palma rastreada vira de tamanho na tela
 SOBRANCELHA_MAX = 14   # px que a sobrancelha sobe em brow = 1
 BALANCO_CABELO = 34    # px de balanco do cabelo em atraso maximo
@@ -396,7 +397,13 @@ class SpriteRenderer:
         # pixels a mao deve ter no quadro
         alvo = mao.escala * w * ESCALA_MAO
         k = max(0.05, alvo / max(1.0, alt_arte * 0.45))
-        espelhar = mao.lado == "Left"
+
+        # Espelha comparando o polegar MEDIDO com o polegar da arte, nao pelo
+        # rotulo de qual mao e. A arte foi desenhada com o polegar a direita;
+        # se o rastreio ve o polegar do outro lado, ela entra espelhada.
+        # Assim tambem funciona quando a pessoa mostra as costas da mao, em
+        # que a mesma mao aparece com o polegar trocado de lado.
+        espelhar = mao.polegar_dir != ARTE_POLEGAR_DIR
 
         ax, ay = self.ancora_mao
         centro = (larg_arte * ax, alt_arte * ay)

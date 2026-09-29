@@ -36,6 +36,7 @@ class PoseMao:
         self.angulo = 0.0     # graus, 0 = dedos para cima
         self.abertura = 1.0   # 0 punho fechado .. 1 mao aberta
         self.presenca = 0.0   # 0..1, para a mao surgir e sumir sem piscar
+        self.polegar_dir = True   # polegar a direita dos dedos, na tela
 
         self._s = {}
 
@@ -79,6 +80,21 @@ class PoseMao:
         else:
             espalhamento = 1.6
         abertura = clamp((espalhamento - 1.05) / 0.85, 0.0, 1.0)
+
+        # De que lado dos dedos esta o polegar, NA TELA. E o que decide se a
+        # arte da mao entra espelhada ou nao.
+        #
+        # Nao da para tirar isso do rotulo do MediaPipe: alem de ele vir
+        # trocado pelo espelhamento do quadro, o rotulo diz qual mao e, nao
+        # qual lado dela esta virado para a camera. Mostrando as costas da
+        # mao, a mesma mao tem o polegar do outro lado - e medindo aqui isso
+        # sai de graca.
+        eixo = (medio[0] - pulso[0], medio[1] - pulso[1])
+        ao_polegar = (p[POLEGAR_PONTA][0] - pulso[0],
+                      p[POLEGAR_PONTA][1] - pulso[1])
+        cruz = eixo[0] * ao_polegar[1] - eixo[1] * ao_polegar[0]
+        if abs(cruz) > 1e-4:          # de perfil o sinal fica instavel
+            self.polegar_dir = cruz < 0
 
         self.presenca = self._suave("presenca", 1.0, dt, 0.10)
         self.x = self._suave("x", cx, dt, 0.045)
