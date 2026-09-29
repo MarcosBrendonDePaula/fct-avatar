@@ -7,8 +7,17 @@ import cv2
 
 class Capture:
     def __init__(self, index=0, width=1280, height=720, fps=30):
-        self.cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
-        if not self.cap.isOpened():
+        # Media Foundation primeiro: na mesma camera e resolucao, o DirectShow
+        # entregava 10 fps contra 30 do MSMF. DSHOW fica so como reserva, para
+        # webcams que o MSMF nao enxerga.
+        self.cap = None
+        for api, nome in ((cv2.CAP_MSMF, "MSMF"), (cv2.CAP_DSHOW, "DSHOW")):
+            cap = cv2.VideoCapture(index, api)
+            if cap.isOpened():
+                self.cap, self.backend = cap, nome
+                break
+            cap.release()
+        if self.cap is None:
             raise RuntimeError(
                 f"Nao consegui abrir a webcam {index}. "
                 "Feche outros apps que possam estar usando a camera."

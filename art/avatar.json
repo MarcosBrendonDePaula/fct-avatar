@@ -7,16 +7,16 @@
   "corte_pescoco": 668,
   "caixas": {
     "olho_e": [
-      378,
-      335,
-      505,
-      411
+      346,
+      307,
+      537,
+      439
     ],
     "olho_d": [
-      545,
-      333,
-      672,
-      409
+      513,
+      305,
+      704,
+      437
     ],
     "sobr_e": [
       353,
@@ -31,10 +31,10 @@
       353
     ],
     "boca": [
-      426,
-      482,
-      628,
-      596
+      400,
+      460,
+      654,
+      618
     ]
   },
   "camadas": {
@@ -52,60 +52,74 @@
         0
       ]
     },
+    "cabeca_esq": {
+      "arquivo": "cabeca_esq.png",
+      "pos": [
+        0,
+        0
+      ]
+    },
+    "cabeca_dir": {
+      "arquivo": "cabeca_dir.png",
+      "pos": [
+        0,
+        0
+      ]
+    },
     "olhos_abertos:olho_e": {
       "arquivo": "olhos_abertos__olho_e.png",
       "pos": [
-        378,
-        335
+        346,
+        307
       ]
     },
     "olhos_abertos:olho_d": {
       "arquivo": "olhos_abertos__olho_d.png",
       "pos": [
-        545,
-        333
+        513,
+        305
       ]
     },
     "olhos_fechados:olho_e": {
       "arquivo": "olhos_fechados__olho_e.png",
       "pos": [
-        378,
-        335
+        346,
+        307
       ]
     },
     "olhos_fechados:olho_d": {
       "arquivo": "olhos_fechados__olho_d.png",
       "pos": [
-        545,
-        333
+        513,
+        305
       ]
     },
     "boca_fechada:boca": {
       "arquivo": "boca_fechada__boca.png",
       "pos": [
-        426,
-        482
+        400,
+        460
       ]
     },
     "boca_a:boca": {
       "arquivo": "boca_a__boca.png",
       "pos": [
-        426,
-        482
+        400,
+        460
       ]
     },
     "boca_i:boca": {
       "arquivo": "boca_i__boca.png",
       "pos": [
-        426,
-        482
+        400,
+        460
       ]
     },
     "boca_o:boca": {
       "arquivo": "boca_o__boca.png",
       "pos": [
-        426,
-        482
+        400,
+        460
       ]
     }
   },

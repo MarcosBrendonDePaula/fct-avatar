@@ -19,12 +19,11 @@ import time
 import cv2
 import numpy as np
 
-from fct.capture import Capture
+from fct.pipeline import TrackingThread
 from fct.imagem import Ajuste
 from fct.renderer import Renderer
 from fct.sprite_renderer import SpriteRenderer
 from fct.state import StateMapper
-from fct.tracker import Tracker
 
 FUNDO = (26, 28, 34)
 VERDE = (150, 240, 160)
@@ -70,7 +69,7 @@ def desenhar_malha(cam, av):
     return cam
 
 
-def painel(cam, params, ajuste, fps, malha, av):
+def painel(cam, params, ajuste, fps, fps_track, malha, av):
     alt = 720
     largura = int(cam.shape[1] * (alt / 2) / cam.shape[0])
     cam = cv2.resize(cam, (largura, alt // 2))
@@ -92,7 +91,8 @@ def painel(cam, params, ajuste, fps, malha, av):
 
     linhas = [
         (f"{estado}", cor_estado),
-        (f"fps {fps:.0f}   brilho {ajuste.brilho:.0f}", (190, 190, 190)),
+        (f"desenho {fps:.0f} fps   tracking {fps_track:.0f} fps"
+         f"   brilho {ajuste.brilho:.0f}", (190, 190, 190)),
         (f"{ajuste.resumo()}", (190, 190, 190)),
         (aviso, cor_aviso),
         ("", None),
@@ -135,11 +135,13 @@ def main():
                     help="usa o boneco desenhado em codigo em vez da arte")
     ap.add_argument("--ganho", type=float, default=1.0)
     ap.add_argument("--gama", type=float, default=1.0)
+    ap.add_argument("--fps", type=float, default=45,
+                    help="limite do laco de desenho; desenhar solto rouba CPU "
+                         "da thread de tracking e o movimento fica pior")
     ap.add_argument("--auto-brilho", action="store_true",
                     help="ajusta o ganho sozinho (bom para quarto escuro)")
     args = ap.parse_args()
 
-    tracker = Tracker(track_hands=not args.no_hands)
     mapper = StateMapper()
     ajuste = Ajuste(ganho=args.ganho, gama=args.gama, auto=args.auto_brilho)
     fundo = FUNDO[::-1] + (255,)   # opaco: converter fica barato
@@ -150,19 +152,19 @@ def main():
     fps, t_prev = 0.0, time.time()
     print(__doc__)
 
-    with Capture(args.camera) as cap:
-        ultimo_id, av = -1, None
+    with TrackingThread(args.camera, track_hands=not args.no_hands,
+                        ajuste=ajuste) as pipe:
+        prox = time.time()
         while True:
-            frame = cap.read()
+            agora = time.time()
+            if agora < prox:
+                time.sleep(min(0.003, prox - agora))
+                continue
+            prox = agora + 1.0 / args.fps
+
+            av, frame = pipe.ultimo()
             if frame is None:
                 continue
-            frame = ajuste.aplicar(frame)
-
-            # so roda o tracking em frame novo; o render continua em toda volta
-            # para a animacao idle nao engasgar quando a camera atrasa.
-            if cap.frame_id != ultimo_id:
-                ultimo_id = cap.frame_id
-                av = tracker.process(frame)
             params = mapper.update(av)
             img = rgba_para_bgr(renderer.render(params))
 
@@ -171,7 +173,8 @@ def main():
             t_prev = agora
 
             if debug:
-                img = np.hstack([img, painel(frame, params, ajuste, fps, malha, av)])
+                img = np.hstack([img, painel(frame, params, ajuste, fps,
+                                             pipe.fps, malha, av)])
             cv2.imshow("Avatar - preview", img)
 
             k = cv2.waitKey(1) & 0xFF
@@ -202,7 +205,6 @@ def main():
                 debug = not debug
                 cv2.destroyAllWindows()
 
-    tracker.close()
     cv2.destroyAllWindows()
 
 

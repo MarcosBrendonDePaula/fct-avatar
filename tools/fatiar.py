@@ -66,6 +66,33 @@ def caixa(pts, indices, margem_x, margem_y, tamanho):
     return tuple(int(v) for v in (x0, y0, x1, y1))
 
 
+def recortar_cabeca(img, pts, size, destino):
+    """Salva a arte recortada por uma elipse suave em volta do rosto e cabelo.
+
+    A elipse vem dos landmarks, nao de numeros fixos, para funcionar igual na
+    vista frontal e nas de 3/4.
+    """
+    oval = [pts[i] for i in ROSTO_OVAL]
+    cx = sum(x for x, _ in oval) / len(oval)
+    topo = min(y for _, y in oval)
+    base_y = max(y for _, y in oval)
+    largura = max(x for x, _ in oval) - min(x for x, _ in oval)
+    rx = largura * 0.95          # o cabelo passa bem do oval do rosto
+    ry = (base_y - topo) * 0.82
+    cy = (topo + base_y) / 2 - ry * 0.12
+
+    mascara = Image.new("L", size, 0)
+    ImageDraw.Draw(mascara).ellipse(
+        [cx - rx, cy - ry, cx + rx, cy + ry + ry * 0.35], fill=255
+    )
+    mascara = mascara.filter(ImageFilter.GaussianBlur(14))
+
+    cabeca = img.copy()
+    cabeca.putalpha(ImageChops.multiply(cabeca.split()[3], mascara))
+    cabeca.save(destino)
+    return cx, cy, rx, ry
+
+
 def recortar(origem, box, destino):
     Image.open(origem).convert("RGBA").crop(box).save(destino)
 
@@ -77,11 +104,14 @@ def main():
     pts, size = landmarks(base)
     OUT.mkdir(parents=True, exist_ok=True)
 
-    b_olho_e = caixa(pts, OLHO_E, 26, 24, size)
-    b_olho_d = caixa(pts, OLHO_D, 26, 24, size)
+    # margens generosas: o olho aberto tem cilios e cantos que passam bem do
+    # contorno dos landmarks. Caixa apertada deixa o olho antigo aparecendo
+    # por baixo do sprite novo.
+    b_olho_e = caixa(pts, OLHO_E, 58, 52, size)
+    b_olho_d = caixa(pts, OLHO_D, 58, 52, size)
     b_sobr_e = caixa(pts, SOBR_E, 22, 20, size)
     b_sobr_d = caixa(pts, SOBR_D, 22, 20, size)
-    b_boca = caixa(pts, BOCA, 46, 42, size)
+    b_boca = caixa(pts, BOCA, 72, 64, size)
     queixo_y = int(pts[QUEIXO][1])
 
     manifesto = {
@@ -108,28 +138,21 @@ def main():
     img_base.save(OUT / "corpo.png")
     manifesto["camadas"]["corpo"] = {"arquivo": "corpo.png", "pos": [0, 0]}
 
-    oval = [pts[i] for i in ROSTO_OVAL]
-    cx = sum(x for x, _ in oval) / len(oval)
-    topo = min(y for _, y in oval)
-    base_y = max(y for _, y in oval)
-    largura = max(x for x, _ in oval) - min(x for x, _ in oval)
-    # margem generosa: o cabelo sobe bem acima do oval do rosto
-    rx = largura * 0.95
-    ry = (base_y - topo) * 0.82
-    cy = (topo + base_y) / 2 - ry * 0.12
-
-    mascara = Image.new("L", size, 0)
-    ImageDraw.Draw(mascara).ellipse(
-        [cx - rx, cy - ry, cx + rx, cy + ry + ry * 0.35], fill=255
-    )
-    mascara = mascara.filter(ImageFilter.GaussianBlur(14))
-
-    cabeca = img_base.copy()
-    alfa = ImageChops.multiply(cabeca.split()[3], mascara)
-    cabeca.putalpha(alfa)
-    cabeca.save(OUT / "cabeca.png")
+    cx, cy, rx, ry = recortar_cabeca(img_base, pts, size, OUT / "cabeca.png")
     manifesto["camadas"]["cabeca"] = {"arquivo": "cabeca.png", "pos": [0, 0]}
     manifesto["elipse_cabeca"] = [cx, cy, rx, ry]
+
+    # vistas de 3/4: cada uma calcula a propria elipse pelos landmarks dela,
+    # entao o recorte acompanha a cabeca virada sem ninguem ajustar na mao
+    for nome, arquivo in (("cabeca_esq", "vira_esq.png"),
+                          ("cabeca_dir", "vira_dir.png")):
+        origem = ART / arquivo
+        if not origem.exists():
+            continue
+        pts_v, size_v = landmarks(origem)
+        img_v = Image.open(origem).convert("RGBA")
+        recortar_cabeca(img_v, pts_v, size_v, OUT / f"{nome}.png")
+        manifesto["camadas"][nome] = {"arquivo": f"{nome}.png", "pos": [0, 0]}
 
     # sprites de troca: mesma caixa, arquivos diferentes
     variantes = {

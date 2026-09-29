@@ -16,6 +16,9 @@ RAIZ = Path(__file__).resolve().parent.parent
 ART = RAIZ / "art"
 
 # viseme -> sprite disponivel (e/u reaproveitam os vizinhos mais proximos)
+ENTRA_GIRO = 0.45     # a partir daqui troca para a arte de 3/4
+VOLTA_FRENTE = 0.30   # e so volta a frontal abaixo daqui (histerese)
+
 VISEME_SPRITE = {
     "fechada": "boca_fechada", "a": "boca_a", "i": "boca_i",
     "e": "boca_i", "o": "boca_o", "u": "boca_o",
@@ -53,6 +56,7 @@ class SpriteRenderer:
                                    int(info["pos"][1] * self.escala)))
         self.corte = int(self.m["corte_pescoco"] * self.escala)
         self._faltando = set()
+        self._vista = None   # vista de 3/4 em uso, ou None para a frontal
 
     # ------------------------------------------------------------------ util
     def _peca(self, nome):
@@ -76,29 +80,54 @@ class SpriteRenderer:
             raise RuntimeError("camada 'cabeca' ausente; rode tools/fatiar.py")
         cabeca = peca[0].copy()
 
-        # olhos: sprite aberto espremido verticalmente da o meio-termo, o que
-        # evita a piscada "liga/desliga" com so dois quadros de arte.
+        # olhos: com so dois quadros de arte, o meio-termo sai de uma mistura
+        # entre eles. Espremer o sprite aberto verticalmente parecia esperto,
+        # mas arrastava o cabelo e a sobrancelha junto e deixava uma emenda
+        # dupla bem visivel.
         for lado, abertura in (("olho_e", p.eye_open_l), ("olho_d", p.eye_open_r)):
-            if abertura < 0.22:
+            if abertura < 0.12:
                 self._colar(cabeca, f"olhos_fechados:{lado}")
-            elif abertura > 0.92:
+            elif abertura > 0.88:
                 self._colar(cabeca, f"olhos_abertos:{lado}")
             else:
-                self._colar(cabeca, f"olhos_fechados:{lado}")
-                self._espremer(cabeca, f"olhos_abertos:{lado}", abertura)
+                self._mesclar(cabeca, f"olhos_fechados:{lado}",
+                              f"olhos_abertos:{lado}", abertura)
 
         self._colar(cabeca, f"{VISEME_SPRITE.get(p.viseme, 'boca_fechada')}:boca")
+
+        # Giro lateral: PNG 2D nao gira em 3D, entao ha artes em 3/4 e a vista
+        # e TROCADA, nao misturada. Cruzar as duas sobrepunha dois narizes e
+        # duas bocas - visivelmente um fantasma duplo. Misturar so funciona
+        # entre imagens quase iguais, como olho aberto e fechado.
+        #
+        # A troca usa histerese (entra em 0.45, volta em 0.30) para nao
+        # tremular quando o giro fica parado em cima do limiar.
+        vista = self._decidir_vista(p.head_turn)
+        if vista:
+            peca_v = self.cam.get(vista)
+            if peca_v is not None:
+                cabeca = peca_v[0]
         return cabeca
 
-    def _espremer(self, alvo, nome, fator):
-        """Cola o sprite comprimido verticalmente, ancorado na base da caixa."""
-        peca = self._peca(nome)
-        if peca is None:
+    def _decidir_vista(self, turn):
+        if self._vista is None:
+            if abs(turn) > ENTRA_GIRO:
+                self._vista = "cabeca_dir" if turn > 0 else "cabeca_esq"
+        else:
+            girando_dir = self._vista == "cabeca_dir"
+            if abs(turn) < VOLTA_FRENTE or (turn > 0) != girando_dir:
+                self._vista = None
+        return self._vista
+
+    def _mesclar(self, alvo, nome_a, nome_b, t):
+        """Cola a mistura de dois sprites da MESMA caixa (t=0 -> a, t=1 -> b)."""
+        pa, pb = self._peca(nome_a), self._peca(nome_b)
+        if pa is None or pb is None:
+            self._colar(alvo, nome_b if pa is None else nome_a)
             return
-        im, (x, y) = peca
-        h = max(1, int(im.height * fator))
-        alvo.alpha_composite(im.resize((im.width, h), Image.BILINEAR),
-                             dest=(x, y + im.height - h))
+        (ia, pos), (ib, _) = pa, pb
+        mix = cv2.addWeighted(np.asarray(ia), 1.0 - t, np.asarray(ib), t, 0)
+        alvo.alpha_composite(Image.fromarray(mix, "RGBA"), dest=pos)
 
     # --------------------------------------------------------------- publico
     def render(self, p):
