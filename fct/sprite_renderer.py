@@ -200,11 +200,14 @@ class SpriteRenderer:
                                   f"olhos_abertos:{lado}", ab)
             self._colar(cabeca, f"{VISEME_SPRITE.get(p.viseme, 'boca_fechada')}:boca")
 
-        bob = (p.bounce - 0.5) * 5
-        dx = p.head_x * 42 + p.head_turn * 16
-        dy = p.head_y * 34 + bob
+        # Amplitudes limitadas de proposito: o furo aberto na camada do corpo
+        # e menor que a cabeca, e essa folga e o que impede a fresta de
+        # aparecer. Mexer mais que isso comeca a mostrar o buraco.
+        bob = (p.bounce - 0.5) * 4
+        dx = p.head_x * 28 + p.head_turn * 10
+        dy = p.head_y * 22 + bob
 
-        m = cv2.getRotationMatrix2D(self.pivo, -p.head_tilt * 12, 1.0)
+        m = cv2.getRotationMatrix2D(self.pivo, -p.head_tilt * 9, 1.0)
         m[0, 2] += dx
         m[1, 2] += dy
         cabeca = cv2.warpAffine(cabeca, m, (cabeca.shape[1], cabeca.shape[0]),

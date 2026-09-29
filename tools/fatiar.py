@@ -13,6 +13,7 @@ import json
 import sys
 from pathlib import Path
 
+import cv2
 import mediapipe as mp
 import numpy as np
 from mediapipe.tasks import python as mp_python
@@ -33,6 +34,45 @@ QUEIXO = 152
 ROSTO_OVAL = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397,
               365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58,
               132, 93, 234, 127, 162, 21, 54, 103, 67, 109]
+
+
+
+# Pontos que NAO mudam quando o personagem abre a boca ou fecha os olhos:
+# ponte do nariz, cantos dos olhos, temporas e testa. Servem de referencia
+# para alinhar cada variante a base.
+ESTAVEIS = [6, 168, 197, 195, 4, 1, 33, 133, 362, 263, 234, 454, 10, 151]
+
+
+def alinhar(img, pts, pts_base, size):
+    """Encaixa uma variante na base por semelhanca (rotacao+escala+translacao).
+
+    Cada imagem que o modelo devolve vem com um deslocamento global proprio.
+    Sem isso, o sprite da boca recortado da variante nao cai no mesmo lugar
+    do rosto da base e o recorte aparece torto.
+    """
+    origem = np.float32([pts[i] for i in ESTAVEIS])
+    destino = np.float32([pts_base[i] for i in ESTAVEIS])
+    m, _ = cv2.estimateAffinePartial2D(origem, destino, method=cv2.LMEDS)
+    if m is None:
+        return img
+    arr = cv2.warpAffine(np.asarray(img), m, size, flags=cv2.INTER_LANCZOS4,
+                         borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0, 0))
+    desloc = float(np.hypot(m[0, 2], m[1, 2]))
+    if desloc > 1.0:
+        print(f"  alinhada: deslocamento de {desloc:.1f} px corrigido")
+    return Image.fromarray(arr, "RGBA")
+
+
+def suavizar_borda(img, faixa=10):
+    """Degrada o alfa nas bordas do recorte para o retangulo nao aparecer."""
+    w, h = img.size
+    rampa = Image.new("L", (w, h), 255)
+    d = ImageDraw.Draw(rampa)
+    for i in range(faixa):
+        v = int(255 * (i + 1) / (faixa + 1))
+        d.rectangle([i, i, w - 1 - i, h - 1 - i], outline=v)
+    img.putalpha(ImageChops.multiply(img.split()[3], rampa))
+    return img
 
 
 def landmarks(caminho):
@@ -64,6 +104,51 @@ def caixa(pts, indices, margem_x, margem_y, tamanho):
     y0 = max(0, min(ys) - margem_y)
     y1 = min(tamanho[1], max(ys) + margem_y)
     return tuple(int(v) for v in (x0, y0, x1, y1))
+
+
+def elipse_cabeca(pts):
+    oval = [pts[i] for i in ROSTO_OVAL]
+    cx = sum(x for x, _ in oval) / len(oval)
+    topo = min(y for _, y in oval)
+    base_y = max(y for _, y in oval)
+    largura = max(x for x, _ in oval) - min(x for x, _ in oval)
+    rx = largura * 0.95          # o cabelo passa bem do oval do rosto
+    ry = (base_y - topo) * 0.82
+    return cx, (topo + base_y) / 2 - ry * 0.12, rx, ry
+
+
+def furar_corpo(img, pts, size, encolher=0.86):
+    """Apaga a cabeca da camada do corpo e preenche o buraco.
+
+    O corpo era a arte inteira, cabeca incluida. Bastava mexer a cabeca para
+    o rosto original aparecer por tras dela - dois rostos na tela.
+
+    O furo e um pouco MENOR que a elipse da camada da cabeca, para que a
+    cabeca continue cobrindo o buraco mesmo deslocada. O que sobra e
+    preenchido por inpaint: fica borrado, mas so aparece de relance na
+    fresta, e borrado e muito melhor que um segundo rosto.
+    """
+    cx, cy, rx, ry = elipse_cabeca(pts)
+    buraco = Image.new("L", size, 0)
+    ImageDraw.Draw(buraco).ellipse(
+        [cx - rx * encolher, cy - ry * encolher,
+         cx + rx * encolher, cy + ry * encolher + ry * 0.30], fill=255
+    )
+    mascara = np.asarray(buraco)
+    arr = np.asarray(img)
+    rgb = cv2.inpaint(cv2.cvtColor(arr, cv2.COLOR_RGBA2BGR), mascara, 12,
+                      cv2.INPAINT_TELEA)
+
+    # Escurece o preenchimento: o borrado continua la, mas quando aparece na
+    # fresta ele le como sombra atras da cabeca, que e o que deveria haver
+    # ali mesmo - e nao como um borrao.
+    sombra = (rgb.astype(np.float32) * 0.45).astype(np.uint8)
+    m3 = cv2.cvtColor(cv2.GaussianBlur(mascara, (31, 31), 0), cv2.COLOR_GRAY2BGR)
+    rgb = cv2.add(cv2.multiply(sombra, m3, scale=1 / 255.0),
+                  cv2.multiply(rgb, cv2.bitwise_not(m3), scale=1 / 255.0))
+
+    out = np.dstack([cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB), arr[:, :, 3]])
+    return Image.fromarray(out, "RGBA")
 
 
 def recortar_cabeca(img, pts, size, destino):
@@ -135,7 +220,8 @@ def main():
     # cabeca deixava uma emenda reta visivel no ombro. Com a elipse, o que se
     # move e so a cabeca, e o corpo intacto por baixo preenche o resto - a
     # borda difusa esconde o encontro das duas camadas.
-    img_base.save(OUT / "corpo.png")
+    corpo = furar_corpo(img_base, pts, size)
+    corpo.save(OUT / "corpo.png")
     manifesto["camadas"]["corpo"] = {"arquivo": "corpo.png", "pos": [0, 0]}
 
     cx, cy, rx, ry = recortar_cabeca(img_base, pts, size, OUT / "cabeca.png")
@@ -170,9 +256,14 @@ def main():
         if not Path(origem).exists():
             faltando.append(nome)
             continue
+        img_v = Image.open(origem).convert("RGBA")
+        if Path(origem) != base:
+            print(f"{nome}:")
+            pts_v, _ = landmarks(origem)
+            img_v = alinhar(img_v, pts_v, pts, size)
         for peca, box in pecas:
             arq = f"{nome}__{peca}.png"
-            recortar(origem, box, OUT / arq)
+            suavizar_borda(img_v.crop(box)).save(OUT / arq)
             manifesto["camadas"][f"{nome}:{peca}"] = {
                 "arquivo": arq, "pos": [box[0], box[1]]
             }
