@@ -158,7 +158,10 @@ class StateMapper:
         pucker = bs.get("mouthPucker", 0.0)
         smile = (bs.get("mouthSmileLeft", 0) + bs.get("mouthSmileRight", 0)) / 2
         stretch = (bs.get("mouthStretchLeft", 0) + bs.get("mouthStretchRight", 0)) / 2
-        p.mouth_open = self._smooth("mouth_open", remap(jaw, 0.05, 0.55), dt, 0.035)
+        # Piso baixo de proposito: com 0.05 o sistema so reagia a boca bem
+        # aberta, e falar normal (que mal passa de 0.1 no jawOpen) nao movia
+        # nada. A zona morta contra tremor fica na propria curva, nao no piso.
+        p.mouth_open = self._smooth("mouth_open", remap(jaw, 0.015, 0.42), dt, 0.030)
         p.mouth_wide = self._smooth("mouth_wide", clamp(max(smile, stretch) * 1.5, 0, 1), dt, 0.06)
         # sorriso e canal proprio: `stretch` tambem alarga a boca, mas ao
         # falar, e nao ao sorrir - misturar os dois fazia o avatar sorrir no
@@ -174,7 +177,7 @@ class StateMapper:
         # O sorriso vem antes dos visemas de fala: sorrir de boca fechada nao
         # abre o maxilar, entao o canal de abertura fica em zero e, sem este
         # caso, o rosto ficava sempre serio por mais que a pessoa sorrisse.
-        if open_ < 0.12:
+        if open_ < 0.05:
             return "sorriso" if sorriso > 0.35 else "fechada"
         if sorriso > 0.55 and wide > 0.45:
             return "sorriso_aberto"

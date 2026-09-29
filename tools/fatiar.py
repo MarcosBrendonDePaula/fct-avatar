@@ -128,13 +128,14 @@ def landmarks(caminho):
     return [(p.x * w, p.y * h) for p in res.face_landmarks[0]], img.size
 
 
-def caixa(pts, indices, margem_x, margem_y, tamanho):
+def caixa(pts, indices, margem_x, margem_y, tamanho, margem_baixo=None):
     xs = [pts[i][0] for i in indices]
     ys = [pts[i][1] for i in indices]
     x0 = max(0, min(xs) - margem_x)
     x1 = min(tamanho[0], max(xs) + margem_x)
     y0 = max(0, min(ys) - margem_y)
-    y1 = min(tamanho[1], max(ys) + margem_y)
+    y1 = min(tamanho[1], max(ys) + (margem_y if margem_baixo is None
+                                    else margem_baixo))
     return tuple(int(v) for v in (x0, y0, x1, y1))
 
 
@@ -149,7 +150,7 @@ def elipse_cabeca(pts):
     return cx, (topo + base_y) / 2 - ry * 0.12, rx, ry
 
 
-def furar_corpo(img, pts, size, encolher=0.72):
+def furar_corpo(img, pts, size, encolher=0.94):
     """Apaga a cabeca da camada do corpo e preenche o buraco.
 
     O corpo era a arte inteira, cabeca incluida. Bastava mexer a cabeca para
@@ -226,8 +227,11 @@ def main():
     # por baixo do sprite novo.
     b_olho_e = caixa(pts, OLHO_E, 58, 52, size)
     b_olho_d = caixa(pts, OLHO_D, 58, 52, size)
-    b_sobr_e = caixa(pts, SOBR_E, 22, 20, size)
-    b_sobr_d = caixa(pts, SOBR_D, 22, 20, size)
+    # A caixa da sobrancelha desce bem mais do que sobe: ao levantar o
+    # sprite, e a pele de baixo que vai cobrir a sobrancelha original. Sem
+    # essa folga apareceriam duas sobrancelhas.
+    b_sobr_e = caixa(pts, SOBR_E, 30, 26, size, margem_baixo=34)
+    b_sobr_d = caixa(pts, SOBR_D, 30, 26, size, margem_baixo=34)
     b_boca = caixa(pts, BOCA, 72, 64, size)
     queixo_y = int(pts[QUEIXO][1])
 
@@ -291,6 +295,7 @@ def main():
         "boca_a": (ART / "boca_a.png", [("boca", b_boca)]),
         "boca_i": (ART / "boca_i.png", [("boca", b_boca)]),
         "boca_o": (ART / "boca_o.png", [("boca", b_boca)]),
+        "sobrancelhas": (base, [("sobr_e", b_sobr_e), ("sobr_d", b_sobr_d)]),
         "sorriso": (ART / "sorriso.png", [("boca", b_boca)]),
         "sorriso_aberto": (ART / "sorriso_aberto.png", [("boca", b_boca)]),
     }

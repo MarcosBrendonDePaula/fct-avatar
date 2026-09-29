@@ -19,16 +19,16 @@
       437
     ],
     "sobr_e": [
-      353,
-      299,
-      505,
-      355
+      345,
+      293,
+      513,
+      369
     ],
     "sobr_d": [
-      542,
-      299,
-      695,
-      353
+      534,
+      293,
+      703,
+      367
     ],
     "boca": [
       400,
@@ -134,6 +134,20 @@
       "pos": [
         400,
         460
+      ]
+    },
+    "sobrancelhas:sobr_e": {
+      "arquivo": "sobrancelhas__sobr_e.png",
+      "pos": [
+        345,
+        293
+      ]
+    },
+    "sobrancelhas:sobr_d": {
+      "arquivo": "sobrancelhas__sobr_d.png",
+      "pos": [
+        534,
+        293
       ]
     },
     "sorriso:boca": {
