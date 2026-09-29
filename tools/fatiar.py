@@ -63,6 +63,38 @@ def alinhar(img, pts, pts_base, size):
     return Image.fromarray(arr, "RGBA")
 
 
+def alinhar_por_corpo(img, img_base, pts_base, size):
+    """Encaixa uma vista (3/4, cima, baixo) na base pelo CORPO, nao pelo rosto.
+
+    Para as variantes de boca e olho da para alinhar pelos landmarks faciais,
+    porque o rosto continua na mesma pose. Aqui nao: o rosto mudou de
+    proposito, e alinhar por ele desfaria justamente a virada. O que tem de
+    coincidir entre as vistas e o tronco - o prompt pediu ombros parados -,
+    entao a referencia e a faixa abaixo da cabeca, casada por correlacao de
+    fase.
+    """
+    _, cy, _, ry = elipse_cabeca(pts_base)
+    topo = int(min(size[1] - 2, cy + ry * 1.05))
+    if topo >= size[1] - 8:
+        return img
+
+    def faixa(im):
+        g = cv2.cvtColor(np.asarray(im.convert("RGB")), cv2.COLOR_RGB2GRAY)
+        return np.float32(g[topo:, :])
+
+    a, b = faixa(img_base), faixa(img)
+    janela = cv2.createHanningWindow((a.shape[1], a.shape[0]), cv2.CV_32F)
+    (dx, dy), _ = cv2.phaseCorrelate(a, b, janela)
+
+    if abs(dx) < 0.5 and abs(dy) < 0.5:
+        return img
+    print(f"  corpo alinhado: {dx:+.1f}, {dy:+.1f} px")
+    m = np.float32([[1, 0, -dx], [0, 1, -dy]])
+    arr = cv2.warpAffine(np.asarray(img), m, size, flags=cv2.INTER_LANCZOS4,
+                         borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0, 0))
+    return Image.fromarray(arr, "RGBA")
+
+
 def suavizar_borda(img, faixa=10):
     """Degrada o alfa nas bordas do recorte para o retangulo nao aparecer."""
     w, h = img.size
@@ -239,8 +271,13 @@ def main():
         origem = ART / arquivo
         if not origem.exists():
             continue
-        pts_v, size_v = landmarks(origem)
-        img_v = Image.open(origem).convert("RGBA")
+        print(f"{nome}:")
+        img_v = alinhar_por_corpo(Image.open(origem).convert("RGBA"),
+                                  img_base, pts, size)
+        tmp = ART / f".alinhada_{arquivo}"
+        img_v.save(tmp)
+        pts_v, size_v = landmarks(tmp)
+        tmp.unlink()
         recortar_cabeca(img_v, pts_v, size_v, OUT / f"{nome}.png", extra)
         manifesto["camadas"][nome] = {"arquivo": f"{nome}.png", "pos": [0, 0]}
 
