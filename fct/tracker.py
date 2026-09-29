@@ -87,6 +87,8 @@ class Tracker:
                     face_res.facial_transformation_matrixes[0]
                 )
 
+            out.face_points = [(p.x, p.y) for p in lms]
+
             xs = [p.x for p in lms]
             ys = [p.y for p in lms]
             width = max(xs) - min(xs)

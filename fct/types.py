@@ -33,6 +33,8 @@ class AvatarFrame:
     head: HeadPose = field(default_factory=HeadPose)
     blendshapes: dict = field(default_factory=dict)  # 52 coeficientes MediaPipe
     hands: list = field(default_factory=list)
+    face_points: list = field(default_factory=list)  # 468 landmarks normalizados,
+                                                     # so para visualizacao/debug
 
 
 @dataclass

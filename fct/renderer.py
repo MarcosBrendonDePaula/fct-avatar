@@ -11,19 +11,21 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 
-def _rotacionar(img, graus, center):
-    """Rotacao via OpenCV: ~10x mais barata que PIL.rotate bicubico neste
-    tamanho, e e o custo dominante do frame."""
-    if abs(graus) < 0.25:
+def _rotacionar(img, graus, center, escala=1.0):
+    """Rotacao (e escala, que vem de graca na mesma matriz) via OpenCV: ~10x
+    mais barata que PIL.rotate bicubico neste tamanho, e era o custo
+    dominante do frame."""
+    if abs(graus) < 0.25 and abs(escala - 1.0) < 0.001:
         return img
     arr = np.asarray(img)
-    m = cv2.getRotationMatrix2D(center, graus, 1.0)
+    m = cv2.getRotationMatrix2D(center, graus, escala)
     out = cv2.warpAffine(arr, m, (img.width, img.height),
                          flags=cv2.INTER_LINEAR,
                          borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0, 0))
     return Image.fromarray(out, "RGBA")
 
 W, H = 720, 720
+HEAD_SCALE = 0.82   # cabeca um pouco menor: cabe o queixo e aparece o ombro
 
 PELE = (255, 222, 200, 255)
 PELE_SOMBRA = (236, 194, 172, 255)
@@ -58,10 +60,13 @@ class Renderer:
         self._draw_corpo(canvas, p, hx * 0.35, hy * 0.3)
 
         head = self._draw_cabeca(p)
+        # pivo no pescoco (nao no centro da cabeca): inclinar a cabeca gira em
+        # torno da base, como um pescoco de verdade.
         head = _rotacionar(head, -p.head_tilt * 14,
-                           center=(head.width / 2, head.height * 0.92))
+                           center=(head.width / 2, head.height * 0.88),
+                           escala=HEAD_SCALE)
         cx = int(w / 2 - head.width / 2 + hx)
-        cy = int(h * 0.09 + hy)
+        cy = int(h * 0.02 + hy)
         canvas.alpha_composite(head, (cx, cy))
         return canvas
 
