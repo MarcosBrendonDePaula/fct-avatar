@@ -8,39 +8,9 @@ E tudo calculo puro, entao e a parte mais facil de testar.
 import math
 import time
 
+from .filtros import Smoother, clamp, deadzone, remap
+from .maos import RastreioMaos
 from .types import AvatarParams
-
-
-def clamp(v, lo=-1.0, hi=1.0):
-    return max(lo, min(hi, v))
-
-
-def remap(v, in_lo, in_hi, out_lo=0.0, out_hi=1.0):
-    if in_hi == in_lo:
-        return out_lo
-    t = (v - in_lo) / (in_hi - in_lo)
-    return out_lo + clamp(t, 0.0, 1.0) * (out_hi - out_lo)
-
-
-def deadzone(v, dz=0.04):
-    if abs(v) < dz:
-        return 0.0
-    return (abs(v) - dz) / (1 - dz) * (1 if v > 0 else -1)
-
-
-class Smoother:
-    """Filtro exponencial com meia-vida em segundos (estavel a fps variavel)."""
-
-    def __init__(self, half_life=0.06, initial=0.0):
-        self.half_life = half_life
-        self.value = initial
-
-    def __call__(self, target, dt):
-        if dt <= 0:
-            return self.value
-        alpha = 1.0 - 0.5 ** (dt / self.half_life)
-        self.value += (target - self.value) * alpha
-        return self.value
 
 
 class StateMapper:
@@ -56,6 +26,7 @@ class StateMapper:
         self._auto_desde = None    # inicio da janela de calibracao automatica
         self._params = AvatarParams()
         self._t_start = time.time()
+        self._maos = RastreioMaos()
 
     def _smooth(self, key, target, dt, half_life=0.06):
         if key not in self._s:
@@ -99,6 +70,9 @@ class StateMapper:
 
         p = self._params
         p.present = frame.face_present
+        # As maos sao independentes do rosto: continuam valendo mesmo quando
+        # a face some de quadro.
+        p.maos = self._maos.atualizar(frame.hands, dt)
 
         # idle: respiracao suave, roda mesmo sem rosto
         p.bounce = 0.5 + 0.5 * math.sin((now - self._t_start) * 1.6)

@@ -29,6 +29,7 @@ ART = RAIZ / "art"
 
 GIRO_MAX = 0.16       # radianos de giro no cilindro em head_turn = 1
 ACENO_MAX = 0.13      # idem para o acenar
+ESCALA_MAO = 2.2       # quanto a palma rastreada vira de tamanho na tela
 SOBRANCELHA_MAX = 14   # px que a sobrancelha sobe em brow = 1
 BALANCO_CABELO = 34    # px de balanco do cabelo em atraso maximo
 LIMITE_CILINDRO = 0.50  # passando disso, usa a arte desenhada naquela pose
@@ -126,6 +127,11 @@ class SpriteRenderer:
             if nome in cam:
                 self.cabecas[nome] = cam[nome][0].recortar(
                     self.hy0, hy1, self.hx0, hx1)
+
+        # maos: arte inteira, posicionada pelo rastreio (nao e recorte da base)
+        self.maos = {n: cam.pop(n)[0] for n in ("mao_aberta", "mao_fechada")
+                     if n in cam}
+        self.ancora_mao = tuple(self.m.get("ancora_mao", (0.5, 0.93)))
 
         # sprites de olho e boca, em coordenadas da caixa da cabeca
         self.pecas = {}
@@ -365,7 +371,55 @@ class SpriteRenderer:
         cabeca.transformar(
             self._local(cabeca_afim, self.hx0, self.hy0), (larg, alt)
         ).sobre_fundo(quadro, self.hx0, self.hy0)
+
+        for mao in p.maos:
+            self._desenhar_mao(quadro, mao)
         return quadro
+
+    # ------------------------------------------------------------------ maos
+    def _desenhar_mao(self, quadro, mao):
+        """Desenha uma mao na pose vinda dos landmarks.
+
+        A arte e uma so, espelhada para a outra mao. O pulso e o ponto fixo:
+        e em torno dele que a mao gira, e e ele que segue o rastreio - girar
+        pelo centro da imagem faria a mao orbitar o proprio punho.
+        """
+        camada = self.maos.get("mao_aberta" if mao.abertura > 0.5
+                               else "mao_fechada") or self.maos.get("mao_aberta")
+        if camada is None:
+            return
+
+        h, w = self.size[1], self.size[0]
+        alt_arte, larg_arte = camada.forma
+
+        # escala: a palma rastreada (0..1 da largura da camera) define quantos
+        # pixels a mao deve ter no quadro
+        alvo = mao.escala * w * ESCALA_MAO
+        k = max(0.05, alvo / max(1.0, alt_arte * 0.45))
+        espelhar = mao.lado == "Left"
+
+        ax, ay = self.ancora_mao
+        centro = (larg_arte * ax, alt_arte * ay)
+        m = cv2.getRotationMatrix2D(centro, -mao.angulo if not espelhar
+                                    else mao.angulo, k)
+        if espelhar:
+            # espelha em x em torno da ancora, para a outra mao
+            m = m @ np.array([[-1, 0, 2 * centro[0]], [0, 1, 0], [0, 0, 1]],
+                             np.float32)
+        # leva a ancora ate a posicao rastreada no quadro
+        m[0, 2] += mao.x * w - centro[0]
+        m[1, 2] += mao.y * h - centro[1]
+
+        recorte = camada.transformar(m, (w, h))
+        if mao.presenca < 0.99:
+            # fade de entrada e saida: a deteccao pisca em quadros isolados
+            f = float(mao.presenca)
+            cv2.convertScaleAbs(recorte.cor, alpha=f, dst=recorte.cor)
+            # inv=255 e totalmente transparente, entao o fade puxa o inverso
+            # na direcao de 255
+            cv2.convertScaleAbs(recorte.inv, alpha=f, beta=255 * (1 - f),
+                                dst=recorte.inv)
+        recorte.sobre_fundo(quadro, 0, 0)
 
     # ------------------------------------------------- transformacoes afins
     @staticmethod

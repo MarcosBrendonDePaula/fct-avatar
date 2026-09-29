@@ -60,4 +60,6 @@ class AvatarParams:
     smile: float = 0.0        # 0..1, sorriso separado da fala
     viseme: str = "fechada"   # fechada|sorriso|sorriso_aberto|a|i|u|e|o
 
+    maos: list = field(default_factory=list)  # PoseMao visiveis neste quadro
+
     present: bool = False     # rosto detectado neste frame

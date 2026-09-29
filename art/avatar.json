@@ -163,6 +163,20 @@
         400,
         460
       ]
+    },
+    "mao_aberta": {
+      "arquivo": "mao_aberta.png",
+      "pos": [
+        0,
+        0
+      ]
+    },
+    "mao_fechada": {
+      "arquivo": "mao_fechada.png",
+      "pos": [
+        0,
+        0
+      ]
     }
   },
   "elipse_cabeca": [
@@ -170,5 +184,9 @@
     406.459551171875,
     329.75947265625,
     317.3154010009765
+  ],
+  "ancora_mao": [
+    0.5,
+    0.93
   ]
 }

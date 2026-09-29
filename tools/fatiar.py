@@ -314,6 +314,23 @@ def main():
                 "arquivo": arq, "pos": [box[0], box[1]]
             }
 
+    # maos: arte propria, nao recortada da base. O pulso e a ancora, porque e
+    # em torno dele que a mao gira.
+    for nome, arquivo in (("mao_aberta", "mao_aberta.png"),
+                          ("mao_fechada", "mao_fechada.png")):
+        origem = ART / arquivo
+        if not origem.exists():
+            faltando.append(nome)
+            continue
+        im = Image.open(origem).convert("RGBA")
+        a = np.asarray(im)[:, :, 3]
+        ys, xs = np.nonzero(a > 8)
+        box = (int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1)
+        im.crop(box).save(OUT / f"{nome}.png")
+        manifesto["camadas"][nome] = {"arquivo": f"{nome}.png", "pos": [0, 0]}
+    # ancora da mao: fundo ao centro, onde fica o pulso
+    manifesto["ancora_mao"] = [0.5, 0.93]
+
     (ART / "avatar.json").write_text(json.dumps(manifesto, indent=2), encoding="utf-8")
     print(f"elipse da cabeca: centro=({cx:.0f},{cy:.0f}) raios=({rx:.0f},{ry:.0f})")
     print(f"caixas: olho_e={b_olho_e} boca={b_boca}")
