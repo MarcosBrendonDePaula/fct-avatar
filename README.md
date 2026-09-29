@@ -71,3 +71,16 @@ ainda nao tem sprites proprios. Os visemas E e U reaproveitam I e O.
 
 Design e decisoes:
 `docs/superpowers/specs/2026-09-28-avatar-face-tracking-design.md`
+
+## Licenca
+
+Codigo sob licenca MIT (veja `LICENSE`).
+
+A arte em `art/` foi gerada com o modelo gpt-image da OpenAI e serve de
+personagem de exemplo. Para trocar de personagem nao e preciso mexer em
+codigo: substitua os PNGs de `art/` seguindo os mesmos nomes (`base.png`,
+`olhos_fechados.png`, `boca_a.png`, `boca_i.png`, `boca_o.png`,
+`sorriso.png`, `sorriso_aberto.png`, `vira_esq.png`, `vira_dir.png`,
+`olha_cima.png`, `olha_baixo.png`) e rode `tools/fatiar.py` de novo. O
+fatiador acha olhos, boca e sobrancelhas sozinho, pelos landmarks de cada
+imagem, e alinha as variantes entre si.
