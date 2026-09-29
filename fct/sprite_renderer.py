@@ -26,16 +26,16 @@ from PIL import Image
 RAIZ = Path(__file__).resolve().parent.parent
 ART = RAIZ / "art"
 
-ENTRA_GIRO = 0.45     # a partir daqui troca para a arte de 3/4
-VOLTA_FRENTE = 0.30   # e so volta a frontal abaixo daqui (histerese)
-ENTRA_NOD = 0.50      # idem para o acenar (cima/baixo)
-VOLTA_NOD = 0.33
+GIRO_MAX = 0.16       # radianos de giro no cilindro em head_turn = 1
+ACENO_MAX = 0.13      # idem para o acenar
+LIMITE_CILINDRO = 0.50  # passando disso, usa a arte desenhada naquela pose
 MARGEM_GIRO = 90      # folga em volta da cabeca para a rotacao nao cortar
 
 # viseme -> sprite disponivel (e/u reaproveitam os vizinhos mais proximos)
 VISEME_SPRITE = {
     "fechada": "boca_fechada", "a": "boca_a", "i": "boca_i",
     "e": "boca_i", "o": "boca_o", "u": "boca_o",
+    "sorriso": "sorriso", "sorriso_aberto": "sorriso_aberto",
 }
 
 
@@ -125,6 +125,11 @@ class SpriteRenderer:
                 continue
             self.pecas[nome] = (img, (px - self.hx0, py - self.hy0))
 
+        alt, larg = self.cabecas["cabeca"].shape[:2]
+        gx, gy = np.meshgrid(np.arange(larg, dtype=np.float32),
+                             np.arange(alt, dtype=np.float32))
+        self._grade = (gx, gy)
+
         self.pivo = (self.cabecas["cabeca"].shape[1] / 2,
                      self.m["corte_pescoco"] * self.escala - self.hy0)
 
@@ -175,34 +180,86 @@ class SpriteRenderer:
         "cabeca_cima": ("head_nod", +1), "cabeca_baixo": ("head_nod", -1),
     }
 
-    def _decidir_vista(self, p):
-        """Escolhe a arte de 3/4, de cima ou de baixo - ou None para a frontal.
+    def _mapa_cilindro(self, yaw, pitch):
+        """Mapa de remap que gira a cabeca como se fosse um cilindro.
 
-        O giro tem prioridade sobre o acenar: virar a cabeca muda muito mais a
-        silhueta do que levantar o queixo, entao e o que o olho nota primeiro.
-        A histerese evita tremular quando o valor para em cima do limiar.
+        Tentei antes morfar entre a arte frontal e a de 3/4 por fluxo optico.
+        Nao funciona: as duas artes sao geracoes independentes, nao o mesmo
+        desenho rotacionado, entao nao ha correspondencia real entre os fios
+        de cabelo - e a orelha que surge de um lado nao tem de onde vir.
+        Ficou com fantasma e custando 40 ms.
+
+        Projetar a arte frontal num cilindro resolve o problema pela raiz:
+        ha uma imagem so, entao nao existe fantasma possivel, e o movimento e
+        continuo por construcao. Vale ate uns 25 graus; alem disso a arte de
+        3/4 assume.
+
+        O mapa horizontal depende so da coluna, e o vertical so da linha, o
+        que deixa a conta barata: dois vetores, nao duas matrizes.
         """
-        if self._vista is None:
-            if abs(p.head_turn) > ENTRA_GIRO:
-                self._vista = "cabeca_dir" if p.head_turn > 0 else "cabeca_esq"
-            elif abs(p.head_nod) > ENTRA_NOD:
-                self._vista = "cabeca_cima" if p.head_nod > 0 else "cabeca_baixo"
+        alt, larg = self.cabecas["cabeca"].shape[:2]
+        gx, gy = self._grade
+
+        if abs(yaw) > 1e-3:
+            cx = larg / 2
+            x = np.arange(larg, dtype=np.float32)
+            r = larg * 0.62                       # raio do cilindro
+            seno = np.clip((x - cx) / r, -1, 1)
+            col = cx + r * np.sin(np.arcsin(seno) - yaw)
+            mx = np.broadcast_to(self._preservar_borda(col, x, cx, larg / 2),
+                                 (alt, larg)).astype(np.float32)
         else:
-            campo, sinal = self.EIXOS[self._vista]
-            v = getattr(p, campo)
-            limite = VOLTA_FRENTE if campo == "head_turn" else VOLTA_NOD
-            if abs(v) < limite or (v > 0) != (sinal > 0):
-                self._vista = None
-        if self._vista and self._vista not in self.cabecas:
-            self._vista = None          # arte ainda nao gerada
-        return self._vista
+            mx = gx
+
+        if abs(pitch) > 1e-3:
+            cy = self.pivo[1] * 0.55
+            y = np.arange(alt, dtype=np.float32)
+            r = alt * 0.70
+            seno = np.clip((y - cy) / r, -1, 1)
+            lin = cy + r * np.sin(np.arcsin(seno) - pitch)
+            lin = self._preservar_borda(lin, y, cy, alt / 2)
+            my = np.broadcast_to(lin[:, None], (alt, larg)).astype(np.float32)
+        else:
+            my = gy
+
+        return np.ascontiguousarray(mx), np.ascontiguousarray(my)
+
+    @staticmethod
+    def _preservar_borda(mapa, eixo, centro, meia, inicio=0.55):
+        """Desfaz a deformacao perto da borda, deixando a silhueta parada.
+
+        Deformando ate a borda, o contorno da cabeca encolhia e descobria o
+        furo aberto na camada do corpo - aparecia uma mancha escura ao lado
+        do cabelo. Prendendo a borda, o rosto gira POR DENTRO de uma cabeca
+        de contorno fixo, que e o truque dos rigs 2D.
+        """
+        d = np.clip((np.abs(eixo - centro) / meia - inicio) / (1 - inicio), 0, 1)
+        peso = 1 - d * d * (3 - 2 * d)
+        return mapa * peso + eixo * (1 - peso)
+
+    def _decidir_vista(self, p):
+        """Vista de arte a usar, ou None para a frontal deformada.
+
+        Ate LIMITE_CILINDRO a cabeca frontal e girada pelo cilindro, que e
+        continuo e nunca duplica tracos. Passando disso o cilindro comeca a
+        achatar demais, e a arte desenhada naquela pose assume.
+        """
+        if abs(p.head_turn) > LIMITE_CILINDRO:
+            nome = "cabeca_dir" if p.head_turn > 0 else "cabeca_esq"
+            if nome in self.cabecas:
+                return nome
+        if abs(p.head_nod) > LIMITE_CILINDRO:
+            nome = "cabeca_cima" if p.head_nod > 0 else "cabeca_baixo"
+            if nome in self.cabecas:
+                return nome
+        return None
 
     # --------------------------------------------------------------- publico
     def render(self, p):
-        # Giro lateral: PNG 2D nao gira em 3D, entao ha artes em 3/4 e a vista
-        # e TROCADA, nao misturada. Cruzar as duas sobrepunha dois narizes e
-        # duas bocas. Misturar so serve entre imagens quase iguais, como olho
-        # aberto e fechado.
+        # Giro e acenar: PNG 2D nao gira em 3D, entao ha artes em 3/4, de cima
+        # e de baixo, e o caminho entre elas e MORFADO pelo fluxo optico. Uma
+        # mistura simples sobrepunha dois narizes; o morph leva os tracos de
+        # uma pose a outra.
         vista = self._decidir_vista(p)
         if vista:
             cabeca = self.cabecas[vista].copy()
@@ -221,15 +278,31 @@ class SpriteRenderer:
                                   f"olhos_abertos:{lado}", ab)
             self._colar(cabeca, f"{VISEME_SPRITE.get(p.viseme, 'boca_fechada')}:boca")
 
+            # o cilindro vem DEPOIS de olhos e boca, para a expressao girar
+            # junto com o rosto em vez de ficar colada de frente
+            yaw = p.head_turn * GIRO_MAX
+            pitch = p.head_nod * ACENO_MAX
+            if abs(yaw) > 1e-3 or abs(pitch) > 1e-3:
+                mx, my = self._mapa_cilindro(yaw, pitch)
+                alfa = cabeca[:, :, 3].copy()
+                cabeca = cv2.remap(cabeca, mx, my, cv2.INTER_LINEAR,
+                                   borderMode=cv2.BORDER_REPLICATE)
+                # O alfa volta a ser o original de proposito. Deformado junto,
+                # a borda suave do recorte era esticada e virava um halo
+                # escuro ao lado do cabelo. Como a silhueta fica presa, o
+                # recorte de antes continua valendo.
+                cabeca[:, :, 3] = alfa
+
         # Amplitudes limitadas de proposito: o furo aberto na camada do corpo
         # e menor que a cabeca, e essa folga e o que impede a fresta de
         # aparecer. Mexer mais que isso comeca a mostrar o buraco.
         bob = (p.bounce - 0.5) * 4
         dx = p.head_x * 28 + p.head_turn * 10
-        # Acenar (head_nod): a cabeca sobe/desce E encurta na vertical, porque
-        # inclinar para qualquer um dos lados encurta o rosto em perspectiva.
-        # So o deslocamento, sem o encurtamento, parece a cabeca deslizando.
-        dy = p.head_y * 22 - p.head_nod * 18 + bob
+        # O aceno NAO translada a cabeca: o pescoco e o ombro ficam parados,
+        # entao descer a cabeca inteira a descola do corpo - a face abaixa e o
+        # resto fica no lugar. O aceno sai do encurtamento em torno do pivo do
+        # pescoco, mais o cilindro, que e como uma cabeca de verdade se move.
+        dy = p.head_y * 22 + bob
         squash = 1.0 if vista else 1.0 - 0.10 * abs(p.head_nod)
 
         m = cv2.getRotationMatrix2D(self.pivo, -p.head_tilt * 9, 1.0)

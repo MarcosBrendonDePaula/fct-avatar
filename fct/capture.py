@@ -43,7 +43,10 @@ class Capture:
         if not self._pronto.wait(timeout=5.0):
             self.release()
             raise RuntimeError(
-                f"A webcam {index} abriu mas nao entregou nenhum frame em 5s."
+                f"A webcam {index} abriu mas nao entregou nenhum frame em 5s.\n"
+                "No Windows isso quase sempre e outro programa ja usando a "
+                "camera - outro preview aberto, OBS, Discord, Meet. Feche o "
+                "outro, ou use --camera 1 se tiver mais de uma."
             )
 
     def _loop(self):

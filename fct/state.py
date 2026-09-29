@@ -160,14 +160,24 @@ class StateMapper:
         stretch = (bs.get("mouthStretchLeft", 0) + bs.get("mouthStretchRight", 0)) / 2
         p.mouth_open = self._smooth("mouth_open", remap(jaw, 0.05, 0.55), dt, 0.035)
         p.mouth_wide = self._smooth("mouth_wide", clamp(max(smile, stretch) * 1.5, 0, 1), dt, 0.06)
-        p.viseme = self._viseme(p.mouth_open, p.mouth_wide, pucker, funnel)
+        # sorriso e canal proprio: `stretch` tambem alarga a boca, mas ao
+        # falar, e nao ao sorrir - misturar os dois fazia o avatar sorrir no
+        # meio de uma frase.
+        p.smile = self._smooth("smile", clamp(smile * 1.8, 0, 1), dt, 0.08)
+        p.viseme = self._viseme(p.mouth_open, p.mouth_wide, pucker, funnel,
+                                p.smile)
 
         return p
 
     @staticmethod
-    def _viseme(open_, wide, pucker, funnel):
+    def _viseme(open_, wide, pucker, funnel, sorriso):
+        # O sorriso vem antes dos visemas de fala: sorrir de boca fechada nao
+        # abre o maxilar, entao o canal de abertura fica em zero e, sem este
+        # caso, o rosto ficava sempre serio por mais que a pessoa sorrisse.
         if open_ < 0.12:
-            return "fechada"
+            return "sorriso" if sorriso > 0.35 else "fechada"
+        if sorriso > 0.55 and wide > 0.45:
+            return "sorriso_aberto"
         if pucker > 0.35 or funnel > 0.35:
             return "u" if open_ < 0.45 else "o"
         if wide > 0.45:

@@ -106,7 +106,8 @@ def painel(cam, params, ajuste, fps, fps_track, malha, av):
          f"   olhar {params.gaze_x:+.2f} {params.gaze_y:+.2f}", (200, 200, 200)),
         (f"sobrancelhas {params.brow_l:+.2f} {params.brow_r:+.2f}", (200, 200, 200)),
         (f"boca {params.mouth_open:.2f}  largura {params.mouth_wide:.2f}"
-         f"  viseme {params.viseme}", (200, 200, 200)),
+         f"  sorriso {params.smile:.2f}", (200, 200, 200)),
+        (f"viseme {params.viseme}", (200, 200, 200)),
         (f"maos {len(av.hands) if av else 0}", (200, 200, 200)),
         ("", None),
         ("C calibrar | A auto | +- ganho | [] gama | M malha | P arte", (120, 120, 120)),

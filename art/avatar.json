@@ -135,6 +135,20 @@
         400,
         460
       ]
+    },
+    "sorriso:boca": {
+      "arquivo": "sorriso__boca.png",
+      "pos": [
+        400,
+        460
+      ]
+    },
+    "sorriso_aberto:boca": {
+      "arquivo": "sorriso_aberto__boca.png",
+      "pos": [
+        400,
+        460
+      ]
     }
   },
   "elipse_cabeca": [

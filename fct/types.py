@@ -57,6 +57,7 @@ class AvatarParams:
 
     mouth_open: float = 0.0   # 0..1
     mouth_wide: float = 0.0   # 0..1
-    viseme: str = "fechada"   # fechada|a|i|u|e|o
+    smile: float = 0.0        # 0..1, sorriso separado da fala
+    viseme: str = "fechada"   # fechada|sorriso|sorriso_aberto|a|i|u|e|o
 
     present: bool = False     # rosto detectado neste frame

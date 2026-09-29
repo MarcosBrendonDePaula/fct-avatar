@@ -149,7 +149,7 @@ def elipse_cabeca(pts):
     return cx, (topo + base_y) / 2 - ry * 0.12, rx, ry
 
 
-def furar_corpo(img, pts, size, encolher=0.86):
+def furar_corpo(img, pts, size, encolher=0.72):
     """Apaga a cabeca da camada do corpo e preenche o buraco.
 
     O corpo era a arte inteira, cabeca incluida. Bastava mexer a cabeca para
@@ -281,6 +281,7 @@ def main():
         recortar_cabeca(img_v, pts_v, size_v, OUT / f"{nome}.png", extra)
         manifesto["camadas"][nome] = {"arquivo": f"{nome}.png", "pos": [0, 0]}
 
+
     # sprites de troca: mesma caixa, arquivos diferentes
     variantes = {
         "olhos_abertos": (base, [("olho_e", b_olho_e), ("olho_d", b_olho_d)]),
@@ -290,6 +291,8 @@ def main():
         "boca_a": (ART / "boca_a.png", [("boca", b_boca)]),
         "boca_i": (ART / "boca_i.png", [("boca", b_boca)]),
         "boca_o": (ART / "boca_o.png", [("boca", b_boca)]),
+        "sorriso": (ART / "sorriso.png", [("boca", b_boca)]),
+        "sorriso_aberto": (ART / "sorriso_aberto.png", [("boca", b_boca)]),
     }
 
     faltando = []
