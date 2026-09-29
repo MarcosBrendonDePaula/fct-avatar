@@ -121,11 +121,11 @@ def painel(cam, params, ajuste, fps, fps_track, malha, av):
     return np.vstack([cam, info])
 
 
-def criar_renderer(placeholder, bg):
+def criar_renderer(placeholder, bg, tamanho=720):
     if placeholder:
         return Renderer(bg=bg)
     try:
-        return SpriteRenderer(bg=bg)
+        return SpriteRenderer(saida=(tamanho, tamanho), bg=bg)
     except (FileNotFoundError, RuntimeError) as e:
         print(f"{e}\nCaindo no boneco placeholder.")
         return Renderer(bg=bg)
@@ -139,6 +139,9 @@ def main():
                     help="usa o boneco desenhado em codigo em vez da arte")
     ap.add_argument("--ganho", type=float, default=1.0)
     ap.add_argument("--gama", type=float, default=1.0)
+    ap.add_argument("--tamanho", type=int, default=720,
+                    help="lado do quadro do avatar; o custo por quadro cai "
+                         "com o quadrado disto")
     ap.add_argument("--fps", type=float, default=60,
                     help="limite do laco de desenho; desenhar solto rouba CPU "
                          "da thread de tracking e o movimento fica pior")
@@ -150,7 +153,7 @@ def main():
     ajuste = Ajuste(ganho=args.ganho, gama=args.gama, auto=args.auto_brilho)
     fundo = FUNDO[::-1] + (255,)   # opaco: converter fica barato
     placeholder = args.placeholder
-    renderer = criar_renderer(placeholder, fundo)
+    renderer = criar_renderer(placeholder, fundo, args.tamanho)
 
     debug, malha = True, True
     fps, t_prev, t_painel = 0.0, time.time(), 0.0
@@ -215,7 +218,7 @@ def main():
                 malha = not malha
             elif k == ord("p"):
                 placeholder = not placeholder
-                renderer = criar_renderer(placeholder, fundo)
+                renderer = criar_renderer(placeholder, fundo, args.tamanho)
             elif k == ord("d"):
                 debug = not debug
                 posicionadas = False

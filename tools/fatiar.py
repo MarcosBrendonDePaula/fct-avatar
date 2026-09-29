@@ -139,6 +139,20 @@ def caixa(pts, indices, margem_x, margem_y, tamanho, margem_baixo=None):
     return tuple(int(v) for v in (x0, y0, x1, y1))
 
 
+def capsula(size, cx, cy, rx, ry, extra_baixo):
+    """Elipse da cabeca MAIS o retangulo acima dela, ate o topo do quadro.
+
+    So a elipse deixava as pontas do cabelo (que sobem bem acima do rosto)
+    na camada do corpo: alem de custar - o corpo passava a ocupar o quadro
+    inteiro - esse cabelo ficava parado enquanto a cabeca se mexia.
+    """
+    m = Image.new("L", size, 0)
+    d = ImageDraw.Draw(m)
+    d.ellipse([cx - rx, cy - ry, cx + rx, cy + ry + ry * extra_baixo], fill=255)
+    d.rectangle([cx - rx, 0, cx + rx, cy], fill=255)
+    return m
+
+
 def elipse_cabeca(pts):
     oval = [pts[i] for i in ROSTO_OVAL]
     cx = sum(x for x, _ in oval) / len(oval)
@@ -151,37 +165,23 @@ def elipse_cabeca(pts):
 
 
 def furar_corpo(img, pts, size, encolher=0.94):
-    """Apaga a cabeca da camada do corpo e preenche o buraco.
+    """Vaza a cabeca da camada do corpo.
 
-    O corpo era a arte inteira, cabeca incluida. Bastava mexer a cabeca para
-    o rosto original aparecer por tras dela - dois rostos na tela.
+    O corpo era a arte inteira, cabeca incluida; bastava mexer a cabeca para
+    o rosto original aparecer atras dela - dois rostos na tela.
 
-    O furo e um pouco MENOR que a elipse da camada da cabeca, para que a
-    cabeca continue cobrindo o buraco mesmo deslocada. O que sobra e
-    preenchido por inpaint: fica borrado, mas so aparece de relance na
-    fresta, e borrado e muito melhor que um segundo rosto.
+    O furo e VAZADO, nao preenchido. Preenchendo por inpaint, o alfa
+    continuava 255 e a camada seguia ocupando o quadro inteiro, com o custo
+    de compor tudo isso todo quadro. E como agora a cabeca herda a
+    transformacao do corpo, as duas andam juntas e a fresta nao aparece.
     """
     cx, cy, rx, ry = elipse_cabeca(pts)
-    buraco = Image.new("L", size, 0)
-    ImageDraw.Draw(buraco).ellipse(
-        [cx - rx * encolher, cy - ry * encolher,
-         cx + rx * encolher, cy + ry * encolher + ry * 0.30], fill=255
-    )
-    mascara = np.asarray(buraco)
-    arr = np.asarray(img)
-    rgb = cv2.inpaint(cv2.cvtColor(arr, cv2.COLOR_RGBA2BGR), mascara, 12,
-                      cv2.INPAINT_TELEA)
-
-    # Escurece o preenchimento: o borrado continua la, mas quando aparece na
-    # fresta ele le como sombra atras da cabeca, que e o que deveria haver
-    # ali mesmo - e nao como um borrao.
-    sombra = (rgb.astype(np.float32) * 0.45).astype(np.uint8)
-    m3 = cv2.cvtColor(cv2.GaussianBlur(mascara, (31, 31), 0), cv2.COLOR_GRAY2BGR)
-    rgb = cv2.add(cv2.multiply(sombra, m3, scale=1 / 255.0),
-                  cv2.multiply(rgb, cv2.bitwise_not(m3), scale=1 / 255.0))
-
-    out = np.dstack([cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB), arr[:, :, 3]])
-    return Image.fromarray(out, "RGBA")
+    buraco = capsula(size, cx, cy, rx * encolher, ry * encolher, 0.30 / encolher)
+    buraco = buraco.filter(ImageFilter.GaussianBlur(10))
+    out = img.copy()
+    out.putalpha(ImageChops.multiply(out.split()[3],
+                                     ImageChops.invert(buraco)))
+    return out
 
 
 def recortar_cabeca(img, pts, size, destino, extra_baixo=0.35):
@@ -199,10 +199,7 @@ def recortar_cabeca(img, pts, size, destino, extra_baixo=0.35):
     ry = (base_y - topo) * 0.82
     cy = (topo + base_y) / 2 - ry * 0.12
 
-    mascara = Image.new("L", size, 0)
-    ImageDraw.Draw(mascara).ellipse(
-        [cx - rx, cy - ry, cx + rx, cy + ry + ry * extra_baixo], fill=255
-    )
+    mascara = capsula(size, cx, cy, rx, ry, extra_baixo)
     mascara = mascara.filter(ImageFilter.GaussianBlur(14))
 
     cabeca = img.copy()

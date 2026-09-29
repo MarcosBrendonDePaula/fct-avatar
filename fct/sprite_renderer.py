@@ -32,7 +32,7 @@ ACENO_MAX = 0.13      # idem para o acenar
 SOBRANCELHA_MAX = 14   # px que a sobrancelha sobe em brow = 1
 BALANCO_CABELO = 34    # px de balanco do cabelo em atraso maximo
 LIMITE_CILINDRO = 0.50  # passando disso, usa a arte desenhada naquela pose
-MARGEM_GIRO = 90      # folga em volta da cabeca para a rotacao nao cortar
+MARGEM_GIRO = 52      # folga em volta da cabeca para a rotacao nao cortar
 MARGEM_CORPO = 40     # idem para o tronco
 
 # viseme -> sprite disponivel (e/u reaproveitam os vizinhos mais proximos)
@@ -154,7 +154,8 @@ class SpriteRenderer:
     def _colar(self, alvo, nome, dx=0, dy=0):
         p = self._peca(nome)
         if p is not None:
-            alvo.sobrepor(p[0], p[1][0] + int(dx), p[1][1] + int(dy))
+            alvo.sobrepor(p[0], p[1][0] + int(dx), p[1][1] + int(dy),
+                          alfa=False)
 
     def _mesclar(self, alvo, nome_a, nome_b, t):
         """Cola a mistura de dois sprites da MESMA caixa (t=0 -> a, t=1 -> b)."""
@@ -162,7 +163,8 @@ class SpriteRenderer:
         if pa is None or pb is None:
             self._colar(alvo, nome_b if pa is None else nome_a)
             return
-        alvo.sobrepor(pa[0].misturar(pb[0], t), *pa[1])
+        alvo.sobrepor(pa[0].misturar(pb[0], t, com_alfa=False), *pa[1],
+                      alfa=False)
 
     def _peso_cabelo(self):
         """Peso por linha: 1 no alto da cabeca, 0 na altura do pescoco.
@@ -285,7 +287,7 @@ class SpriteRenderer:
         if vista:
             cabeca = self.cabecas[vista]
         else:
-            cabeca = self.cabecas["cabeca"].copia()
+            cabeca = self.cabecas["cabeca"].copia(com_alfa=False)
 
             # Sobrancelhas antes dos olhos: o recorte leva pele de baixo
             # junto, entao subir o sprite cobre a sobrancelha original - e o

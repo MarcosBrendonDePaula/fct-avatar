@@ -48,8 +48,12 @@ class Camada:
         return Camada(np.ascontiguousarray(self.cor[y0:y1, x0:x1]),
                       np.ascontiguousarray(self.inv[y0:y1, x0:x1]))
 
-    def copia(self):
-        return Camada(self.cor.copy(), self.inv.copy())
+    def copia(self, com_alfa=True):
+        """Copia a camada. Sem `com_alfa`, o alfa e COMPARTILHADO com a
+        original - serve quando so a cor vai mudar, como ao colar sprites
+        dentro de uma cabeca que ja e opaca ali."""
+        return Camada(self.cor.copy(),
+                      self.inv.copy() if com_alfa else self.inv)
 
     def caixa_util(self):
         """Menor retangulo com algo visivel (inv < 255 quer dizer alfa > 0)."""
@@ -84,13 +88,23 @@ class Camada:
             self.inv, mx, my, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
         return Camada(cor, inv)
 
-    def misturar(self, outra, t):
-        """Interpola duas camadas da mesma forma (t=0 -> self, t=1 -> outra)."""
-        return Camada(cv2.addWeighted(self.cor, 1 - t, outra.cor, t, 0),
-                      cv2.addWeighted(self.inv, 1 - t, outra.inv, t, 0))
+    def misturar(self, outra, t, com_alfa=True):
+        """Interpola duas camadas da mesma forma (t=0 -> self, t=1 -> outra).
 
-    def sobrepor(self, src, x=0, y=0):
-        """Compoe `src` sobre esta camada, em (x, y). Altera esta camada."""
+        Sem `com_alfa` o alfa do primeiro e reaproveitado: quando a mistura
+        vai ser colada numa area opaca, interpolar a transparencia tambem
+        seria trabalho jogado fora.
+        """
+        return Camada(cv2.addWeighted(self.cor, 1 - t, outra.cor, t, 0),
+                      cv2.addWeighted(self.inv, 1 - t, outra.inv, t, 0)
+                      if com_alfa else self.inv)
+
+    def sobrepor(self, src, x=0, y=0, alfa=True):
+        """Compoe `src` sobre esta camada, em (x, y). Altera esta camada.
+
+        `alfa=False` pula a atualizacao da transparencia: usado quando o
+        sprite cai numa area ja opaca, onde o resultado seria identico.
+        """
         h, w = src.forma
         H, W = self.forma
         x0, y0 = max(0, x), max(0, y)
@@ -100,10 +114,11 @@ class Camada:
         sc = src.cor[y0 - y:y1 - y, x0 - x:x1 - x]
         si = src.inv[y0 - y:y1 - y, x0 - x:x1 - x]
         cor = self.cor[y0:y1, x0:x1]
-        inv = self.inv[y0:y1, x0:x1]
+        inv = self.inv[y0:y1, x0:x1] if alfa else None
         cv2.add(sc, cv2.multiply(cor, si, scale=1 / 255.0), dst=cor)
-        # alfa resultante: 1-(1-as)(1-ad)  ->  inv = inv_s * inv_d
-        cv2.multiply(inv, si, dst=inv, scale=1 / 255.0)
+        if alfa:
+            # alfa resultante: 1-(1-as)(1-ad)  ->  inv = inv_s * inv_d
+            cv2.multiply(inv, si, dst=inv, scale=1 / 255.0)
 
     def sobre_fundo(self, fundo_bgr, x=0, y=0):
         """Compoe esta camada sobre um BGR opaco. Altera fundo_bgr."""
